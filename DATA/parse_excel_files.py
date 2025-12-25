@@ -548,12 +548,12 @@ def main() -> None:
         )
         try:
             checked, mismatches = clean_one_file(src, dst)
-            # ✅ КОМПАКТНО: як ти просив
+            # ✅ КОМПАКТНО:
             print(f"OK   {filename:<{FILENAME_COL_WIDTH}} | checked={checked:<4} | mismatches={mismatches:<20}")
         except Exception as exc:
             fail_dst = safe_copy_to_failed(src)
             LOGGER.exception("FAIL file=%s error=%s", src, exc)
-            # ✅ КОМПАКТНО: як було раніше
+            # ✅ КОМПАКТНО:
             print(f"FAIL {filename} | {exc} | copied to {fail_dst}")
 
 
