@@ -1,0 +1,11 @@
+# config.yaml — конфігурація пайплайна дипломного проєкту
+paths:
+  data_root: "DATA"
+  sku_master: "DATA/SKU/sku_master.xlsx"
+  sales_reports_dir: "DATA/SALES/SALES_REPORTS"
+  result_dir: "DATA/SALES/RESULT"
+  result_workbook: "DATA/SALES/RESULT/results.xlsx"
+
+pipeline:
+  debug: true
+  llm_enabled: true   # false = не викликати LLM (Gemini)
