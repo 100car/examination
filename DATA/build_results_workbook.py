@@ -67,7 +67,10 @@ def _fmt_status(tag: str, use_color: bool = True) -> str:
 # =============================================================================
 # ПАПКИ ПРОЄКТУ (усі всередині SALES/)
 # =============================================================================
-SALES_ROOT_DIR = "SALES"
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent
+SALES_ROOT_DIR = str(BASE_DIR / "SALES")
+
 SALES_REPORTS_DIR = os.path.join(SALES_ROOT_DIR, "SALES_REPORTS")
 RECOGNIZED_SALES_REPORTS_DIR = os.path.join(SALES_ROOT_DIR, "RECOGNIZED_SALES_REPORTS")
 FAILED_SALES_REPORTS_DIR = os.path.join(SALES_ROOT_DIR, "FAILED_SALES_REPORTS")
