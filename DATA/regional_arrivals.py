@@ -37,6 +37,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import datetime
 import os
+from pathlib import Path
 import re
 
 import openpyxl
@@ -115,8 +116,22 @@ def _autosize_columns(ws: openpyxl.worksheet.worksheet.Worksheet, max_rows: int 
 # =============================================================================
 # SKU master
 # =============================================================================
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_SKU_MASTER_PATH = os.path.join(SCRIPT_DIR, "SKU", "sku_master.xlsx")
+# =============================================================================
+# Шляхи проєкту (прив'язані до розташування цього файлу)
+# =============================================================================
+BASE_DIR = Path(__file__).resolve().parent          # .../DATA
+SKU_DIR = BASE_DIR / "SKU"
+SALES_DIR = BASE_DIR / "SALES"
+
+REGIONAL_ARRIVALS_DIR = SALES_DIR / "REGIONAL_ARRIVALS"
+RESULT_DIR = SALES_DIR / "RESULT"
+RESULTS_XLSX = RESULT_DIR / "results.xlsx"
+
+# Дефолтний довідник SKU
+DEFAULT_SKU_MASTER_PATH = str(SKU_DIR / "sku_master.xlsx")
+
+# Створюємо каталоги, якщо їх ще немає
+RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 SKU_SHEET_NAME = "SKU"
 SKU_HEADER_NAME = "SKU (ключ, унікальний)"
@@ -282,11 +297,11 @@ def _to_float(x: object) -> float:
 
 
 # =============================================================================
-# Головна утиліта Step 3
+# Головна утиліта Step 2
 # =============================================================================
 def build_regional_arrivals_sheets(
     results_xlsx_path: str,
-    regional_arrivals_dir: str = os.path.join("SALES", "REGIONAL_ARRIVALS"),
+    regional_arrivals_dir: Optional[str] = None,
     sku_master_path: Optional[str] = None,
     *,
     use_color: bool = True,
@@ -295,6 +310,11 @@ def build_regional_arrivals_sheets(
     Читає 0..3 файли з REGIONAL_ARRIVALS і створює/замінює листи UA+, KZ+, UZ+ у results.xlsx.
     """
     _print_banner("STEP 2 | Build regional arrivals sheets")
+
+    # У Colab/CLI зручно, коли дефолтні шляхи не залежать від поточної директорії
+    if regional_arrivals_dir is None:
+        regional_arrivals_dir = str(REGIONAL_ARRIVALS_DIR)
+
 
     # --- SKU master (optional) ---
     sku_master_path = sku_master_path or DEFAULT_SKU_MASTER_PATH
@@ -443,8 +463,45 @@ def build_regional_arrivals_sheets(
 
 
 def main() -> None:
-    default_results = os.path.join("SALES", "RESULT", "results.xlsx")
-    build_regional_arrivals_sheets(default_results)
+    """CLI entrypoint.
+
+    Типовий сценарій у Colab:
+        !python DATA/regional_arrivals.py
+
+    За потреби можна передати інші шляхи через аргументи.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Крок 3: побудова аркушів регіональних надходжень (UA+/KZ+/UZ+).")
+    parser.add_argument(
+        "--results",
+        default=str(RESULTS_XLSX),
+        help="Шлях до results.xlsx (за замовчуванням: DATA/SALES/RESULT/results.xlsx).",
+    )
+    parser.add_argument(
+        "--regional-arrivals-dir",
+        default=str(REGIONAL_ARRIVALS_DIR),
+        help="Папка з файлами REGIONAL_ARRIVALS (за замовчуванням: DATA/SALES/REGIONAL_ARRIVALS).",
+    )
+    parser.add_argument(
+        "--sku-master",
+        default=DEFAULT_SKU_MASTER_PATH,
+        help="Шлях до sku_master.xlsx (за замовчуванням: DATA/SKU/sku_master.xlsx).",
+    )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Вимкнути кольорові статуси в консолі.",
+    )
+
+    args = parser.parse_args()
+
+    build_regional_arrivals_sheets(
+        results_xlsx_path=args.results,
+        regional_arrivals_dir=args.regional_arrivals_dir,
+        sku_master_path=args.sku_master,
+        use_color=not args.no_color,
+    )
 
 
 if __name__ == "__main__":

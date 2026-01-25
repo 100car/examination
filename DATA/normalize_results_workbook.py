@@ -32,6 +32,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import datetime
 import os
+from pathlib import Path
 import re
 import statistics
 
@@ -47,15 +48,17 @@ SYMBOL_HEADER_NAME = "Symbol"
 NORMALIZED_COL_HEADER = "Symbol_normalized"
 
 
-
+# =============================================================================
+# Уніфікація назв місяців (вихідні колонки завжди: янв..дек)
+# =============================================================================
 REQUIRED_COLUMNS = [
     "Symbol_normalized",
     "янв", "фев", "мар", "апр", "май", "июн",
-    "июл", "авг", "сен", "окт", "ноя", "дек"
+    "июл", "авг", "сен", "окт", "ноя", "дек",
 ]
 
-# Канонічні місяці -> синоніми, які можуть зустрічатись у заголовках
-_MONTH_ALIASES: Dict[str, List[str]] = {
+# Канонічні місяці -> синоніми, які можуть зустрічатися у заголовках
+_MONTH_ALIASES = {
     "янв": ["янв", "январ", "january", "jan"],
     "фев": ["фев", "феврал", "february", "feb"],
     "мар": ["мар", "март", "march", "mar"],
@@ -71,19 +74,36 @@ _MONTH_ALIASES: Dict[str, List[str]] = {
 }
 
 def _canon_month(header: str) -> Optional[str]:
-    """Повертає 'янв'..'дек', якщо заголовок схожий на місяць."""
-    if not header:
+    """Повертає 'янв'..'дек', якщо заголовок схожий на назву місяця."""
+    if header is None:
         return None
     h = str(header).strip().lower()
+    if not h:
+        return None
     for m, keys in _MONTH_ALIASES.items():
         if any(k in h for k in keys):
             return m
     return None
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_SKU_MASTER_PATH = os.path.join(SCRIPT_DIR, "SKU", "sku_master.xlsx")
-DEFAULT_MONTHLY_SALES_CORRECTED_DIR = os.path.join(SCRIPT_DIR, "SALES", "MONTHLY_SALES_CORRECTED")
-DEFAULT_CORRECTIONS_LOG_PATH = os.path.join(SCRIPT_DIR, "SALES", "RESULT", "monthly_sales_corrections.log")
+# =============================================================================
+# Шляхи проєкту (прив'язані до розташування цього файлу)
+# =============================================================================
+BASE_DIR = Path(__file__).resolve().parent          # .../DATA
+SKU_DIR = BASE_DIR / "SKU"
+SALES_DIR = BASE_DIR / "SALES"
+
+RESULT_DIR = SALES_DIR / "RESULT"
+LOGS_DIR = SALES_DIR / "LOGS"
+MONTHLY_SALES_CORRECTED_DIR = SALES_DIR / "MONTHLY_SALES_CORRECTED"
+
+# Дефолтні файли/папки
+DEFAULT_SKU_MASTER_PATH = str(SKU_DIR / "sku_master.xlsx")
+DEFAULT_MONTHLY_SALES_CORRECTED_DIR = str(MONTHLY_SALES_CORRECTED_DIR)
+DEFAULT_CORRECTIONS_LOG_PATH = str(RESULT_DIR / "monthly_sales_corrections.log")
+
+# Створюємо каталоги, якщо їх ще немає (щоб у Colab не падати на save/log)
+RESULT_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 SKU_SHEET_NAME = "SKU"
 SKU_HEADER_NAME = "SKU (ключ, унікальний)"
@@ -459,7 +479,7 @@ def normalize_results_workbook(
 
     wb = openpyxl.load_workbook(results_xlsx_path)
 
-    # --- Load arrivals (UA+/KZ+/UZ+) if present (produced by Step 2) ---
+    # --- Завантажити (UA+/KZ+/UZ+) ,якщо вони там є (зроблено на 2-му кроці) ---
     arrivals_qty: Dict[str, Dict[str, float]] = {
         "UA": _load_arrivals_qty_by_region(wb, "UA"),
         "KZ": _load_arrivals_qty_by_region(wb, "KZ"),
@@ -496,8 +516,10 @@ def normalize_results_workbook(
                 symbol_col_idx = i
                 break
 
-        # month columns for median / output (canonical short names)
-        # Build map: canonical month -> actual header in source sheet
+        # ------------------------------------------------------------
+        # Місячні колонки: зчитуємо з будь-яких назв і приводимо до янв..дек
+        # ------------------------------------------------------------
+        # мапа: канонічний місяць -> реальна назва колонки у джерелі
         month_col_by_canon: Dict[str, str] = {}
         for hk in header_keys:
             if hk in ("", symbol_key, "Stock", "TOTAL"):
@@ -506,8 +528,8 @@ def normalize_results_workbook(
             if cm and cm not in month_col_by_canon:
                 month_col_by_canon[cm] = hk
 
-        # fixed month order for median/output
-        month_keys = REQUIRED_COLUMNS[1:]  # ["янв", ..., "дек"]
+        # фіксований порядок місяців для медіани/виводу
+        month_keys: List[str] = REQUIRED_COLUMNS[1:]
 
         # --- build normalized rows with mapping/color ---
         rows_norm: List[Dict[str, object]] = []
@@ -534,10 +556,11 @@ def normalize_results_workbook(
 
             values = {header_keys[i]: row_vals[i] for i in range(len(header_keys))}
 
-            # Populate canonical month keys (янв..дек) from whatever month headers are present
+            # Додаємо канонічні місяці (янв..дек) у словник значень
             for cm in month_keys:
                 src_col = month_col_by_canon.get(cm)
                 values[cm] = values.get(src_col) if src_col else None
+
             rows_norm.append({"symbol": sym_val, "sym_norm": final_norm, "fill": status_fill, "values": values})
 
         # --- aggregate by sym_norm for uniqueness ---
@@ -597,13 +620,15 @@ def normalize_results_workbook(
 
         # --- output headers order ---
         # Symbol, Symbol_normalized, Mediana, Month_sales, Stock, then the rest (excluding Symbol/Stock)
-        # base_other: keep non-month columns, but drop raw month headers (we'll output canonical months)
+        # base_other: лишаємо інші колонки, але ВИКИДАЄМО сирі місячні заголовки,
+        # щоб у виході не було дублю (довгі назви + янв..дек)
         raw_month_headers = set(month_col_by_canon.values())
         base_other = [
             h for h in header_keys
             if h not in ("", symbol_key, "Stock") and h not in raw_month_headers
         ]
-        # Put canonical months first, then the remaining columns (e.g. TOTAL)
+
+        # Додаємо канонічні місяці у фіксованому порядку на початок вихідних колонок
         base_other = month_keys + base_other
         out_headers = [symbol_key, NORMALIZED_COL_HEADER, "Mediana", "Month_sales", "Stock"]
         if include_arrivals_added_col:
@@ -713,9 +738,57 @@ def normalize_results_workbook(
 
 
 def main() -> None:
-    """CLI entrypoint: запускає Крок 2 для results.xlsx за замовчуванням."""
-    default_results = os.path.join(SCRIPT_DIR, "SALES", "RESULT", "results.xlsx")
-    normalize_results_workbook(default_results)
+    """CLI entrypoint.
+
+    Типовий сценарій у Colab:
+        !python DATA/normalize_results_workbook.py
+
+    За потреби можна передати інші шляхи через аргументи.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Крок 4: нормалізація results.xlsx та уніфікація місяців (янв..дек).")
+    parser.add_argument(
+        "--results",
+        default=str(RESULT_DIR / "results.xlsx"),
+        help="Шлях до results.xlsx (за замовчуванням: DATA/SALES/RESULT/results.xlsx).",
+    )
+    parser.add_argument(
+        "--sku-master",
+        default=DEFAULT_SKU_MASTER_PATH,
+        help="Шлях до sku_master.xlsx (за замовчуванням: DATA/SKU/sku_master.xlsx).",
+    )
+    parser.add_argument(
+        "--corrections-dir",
+        default=DEFAULT_MONTHLY_SALES_CORRECTED_DIR,
+        help="Папка з файлами корекцій місячних продажів (MONTHLY_SALES_CORRECTED).",
+    )
+    parser.add_argument(
+        "--corrections-log",
+        default=DEFAULT_CORRECTIONS_LOG_PATH,
+        help="Файл логу для SKU, які не знайдено під час застосування корекцій.",
+    )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Вимкнути кольорові статуси в консолі.",
+    )
+    parser.add_argument(
+        "--include-arrivals-added-col",
+        action="store_true",
+        help="Додати колонку Arrivals_added у *-normalized (якщо доступні аркуші UA+/KZ+/UZ+).",
+    )
+
+    args = parser.parse_args()
+
+    normalize_results_workbook(
+        results_xlsx_path=args.results,
+        sku_master_path=args.sku_master,
+        corrections_dir=args.corrections_dir,
+        corrections_log_path=args.corrections_log,
+        include_arrivals_added_col=args.include_arrivals_added_col,
+        use_color=not args.no_color,
+    )
 
 
 if __name__ == "__main__":
