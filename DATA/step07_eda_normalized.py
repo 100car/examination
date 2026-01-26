@@ -288,7 +288,8 @@ def main() -> None:
     fig = plt.figure()
     regions = sorted(long_all["region"].unique())
     data = [long_all.loc[long_all["region"] == r, "value"].values for r in regions]
-    plt.boxplot(data, labels=regions, showfliers=True)
+    # plt.boxplot(data, labels=regions, showfliers=True)
+    plt.boxplot(data, tick_labels=regions, showfliers=True)
     plt.title("Ящик з вусами: місячні продажі (PR-) по регіонах")
     plt.xlabel("Регіон")
     plt.ylabel("Продажі за місяць")
