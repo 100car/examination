@@ -17,4 +17,4 @@ filters:
   exclude_prefixes: []
 
 analysis:
-  sku_example: "PR-CHE-49-1405-000-SET"  # опційно
+  sku_example: "PR-DAE-47-3538-000-SET"  # опційно
