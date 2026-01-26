@@ -5,7 +5,16 @@ paths:
   sales_reports_dir: "DATA/SALES/SALES_REPORTS"
   result_dir: "DATA/SALES/RESULT"
   result_workbook: "DATA/SALES/RESULT/results.xlsx"
+  eda_dir: "DATA/EDA"
+  ml_dir: "DATA/ML"
 
 pipeline:
   debug: true
   llm_enabled: true   # false = не викликати LLM (Gemini)
+
+filters:
+  include_prefixes: ["PR-"]
+  exclude_prefixes: []
+
+analysis:
+  sku_example: "PR-CHE-49-1405-000-SET"  # опційно
