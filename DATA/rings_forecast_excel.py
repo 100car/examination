@@ -183,7 +183,7 @@ def _build_cli() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--results", type=str, default=str(DEFAULT_RESULTS_XLSX), help="Шлях до results.xlsx")
-    p.add_argument("--months", type=int, default=6, help="Горизонт прогнозу (місяці)")
+    p.add_argument("--months", type=int, default=30, help="Горизонт прогнозу (місяці)")
     return p
 
 
