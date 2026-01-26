@@ -1,5 +1,5 @@
 """
-STEP 9 | EDA для аркушів *-normalized (UA/KZ/UZ)
+STEP 7 | EDA для аркушів *-normalized (UA/KZ/UZ)
 
 Вимога викладача:
 - EDA: обрахунок агрегатних функцій
@@ -13,7 +13,7 @@ STEP 9 | EDA для аркушів *-normalized (UA/KZ/UZ)
   - виключені (не починаються з префіксів)
 
 Запуск у Colab:
-!python DATA/step09_eda_normalized.py
+!python DATA/step07_eda_normalized.py
 
 Вихідні артефакти:
 - <eda_dir>/normalized_long.csv
@@ -195,7 +195,7 @@ def main() -> None:
     results_path, eda_dir = _paths_from_cfg(cfg)
     include_prefixes, _exclude_prefixes = _prefixes_from_cfg(cfg)
 
-    _print_banner("STEP 9 | EDA (*-normalized) | long-format + агрегати + графіки")
+    _print_banner("STEP 7 | EDA (*-normalized) | long-format + агрегати + графіки")
 
     if not results_path.exists():
         raise FileNotFoundError(f"results.xlsx не знайдено: {results_path}")
@@ -294,7 +294,7 @@ def main() -> None:
     plt.ylabel("Продажі за місяць")
     _save_plot(fig, eda_dir / "plots" / "box_monthly_value_by_region.png")
 
-    print("OK | STEP 9 завершено")
+    print("OK | STEP 7 завершено")
     print(f"- long:      {eda_dir / 'normalized_long.csv'}")
     print(f"- summary:   {eda_dir / 'normalized_summary_by_region.csv'}")
     print(f"- plots:     {eda_dir / 'plots'}")
