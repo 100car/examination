@@ -36,7 +36,6 @@ from dotenv import load_dotenv
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook import Workbook
-from openpyxl.workbook import Workbook
 
 # =============================================================================
 # КРАСИВИЙ ВИВІД У КОНСОЛІ (ANSI кольори + банер)
@@ -1014,10 +1013,14 @@ def clean_one_sales_file(input_path: str, output_path_tmp: str) -> Tuple[int, in
     # located beyond MAX_COLS_SCAN.
     header_map = build_header_map(ws_struct, det.header_row, max_cols_scan=ws_struct.max_column)
 
-    # Заголовки виходу: Symbol + місяці + TOTAL (Stock не виводимо)
+    # Заголовки виходу: Symbol + місяці + Stock + TOTAL
+    #
+    # ВАЖЛИВО: Stock тут — це "залишки/остатки/ОС" з *оригінального* sales-звіту.
+    # Саме цей Stock потім переноситься у *-normalized (після Month_sales).
     out_headers: List[str] = ["Symbol"]
     for col_idx in det.month_cols:
         out_headers.append(header_map.get(col_idx, f"month_{col_idx}"))
+    out_headers.append("Stock")
     out_headers.append("TOTAL")
 
     out_wb = Workbook()
@@ -1048,6 +1051,9 @@ def clean_one_sales_file(input_path: str, output_path_tmp: str) -> Tuple[int, in
             month_values.append(v)
             computed_total += v
 
+        # Stock (залишки) з вхідного файлу
+        stock_val = as_number(ws_val.cell(r, det.col_stock).value) if det.col_stock is not None else 0.0
+
         if det.col_total is not None:
             original_total = as_number(ws_val.cell(r, det.col_total).value)
             row_mismatch = abs(computed_total - original_total) > TOL
@@ -1067,6 +1073,12 @@ def clean_one_sales_file(input_path: str, output_path_tmp: str) -> Tuple[int, in
         for v in month_values:
             out_ws.cell(out_row, col_out, v)
             col_out += 1
+
+        # Stock одразу після місяців
+        out_ws.cell(out_row, col_out, stock_val)
+        col_out += 1
+
+        # TOTAL (сума місяців)
         out_ws.cell(out_row, col_out, computed_total)
 
         if row_mismatch:
