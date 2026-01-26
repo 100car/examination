@@ -91,11 +91,11 @@ def _region_need_formula(region: RegionSpec, sku_cell: str, month: int) -> str:
     return f"IFERROR(IF({month}*{ms}-{st}>0, -({month}*{ms}-{st}), 0), 0)"
 
 
-def generate_rings_forecast(results_path: str | Path, forecast_months: int = 6) -> None:
+def generate_rings_forecast(results_path: str | Path, forecast_months: int = 30) -> None:
     """Додає колонки NEED_M1..NEED_MN на RINGS_SUMMARY як формули Excel + форматування."""
     results_path = Path(results_path)
 
-    _print_banner(f"STEP 8 | Forecast ring availability (Excel formulas) | months={forecast_months}")
+    _print_banner(f"STEP 8 | Прогноз наявності поршневих кілець | months={forecast_months}")
     if not results_path.exists():
         raise FileNotFoundError(f"results.xlsx не знайдено: {results_path}")
 
