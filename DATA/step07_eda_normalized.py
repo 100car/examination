@@ -184,9 +184,11 @@ def _build_long_format(df: pd.DataFrame, region: str) -> pd.DataFrame:
     return long[["region", "Symbol_normalized", "month", "value"]]
 
 
-def _save_plot(fig, out_path: Path) -> None:
+def _save_plot(fig, out_path: Path, show: bool = True) -> None:
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
+    if show:
+        plt.show()
     plt.close(fig)
 
 

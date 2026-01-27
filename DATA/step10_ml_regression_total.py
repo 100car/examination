@@ -194,6 +194,7 @@ def main() -> None:
     plt.ylabel("Predicted TOTAL")
     fig.tight_layout()
     fig.savefig(ml_dir / "plots" / "pred_vs_true.png", dpi=150)
+    plt.show()
     plt.close(fig)
 
     # feature importance
@@ -206,6 +207,7 @@ def main() -> None:
     plt.title("Feature importance (top)")
     fig.tight_layout()
     fig.savefig(ml_dir / "plots" / "feature_importance.png", dpi=150)
+    plt.show()
     plt.close(fig)
 
     out_model = ml_dir / "model_rf_total.joblib"

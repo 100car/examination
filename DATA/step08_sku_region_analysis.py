@@ -177,6 +177,7 @@ def main() -> None:
     out_plot = eda_dir / "plots" / f"sku_{sku}_3regions.png"
     fig.tight_layout()
     fig.savefig(out_plot, dpi=150)
+    plt.show()
     plt.close(fig)
 
     means = {r: float(np.mean(y)) for r, y in series.items()}

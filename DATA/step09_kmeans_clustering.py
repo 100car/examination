@@ -184,6 +184,7 @@ def main() -> None:
     plt.ylabel("Inertia")
     fig.tight_layout()
     fig.savefig(ml_dir / "plots" / "elbow.png", dpi=150)
+    plt.show()
     plt.close(fig)
 
     # silhouette
@@ -194,6 +195,7 @@ def main() -> None:
     plt.ylabel("Silhouette")
     fig.tight_layout()
     fig.savefig(ml_dir / "plots" / "silhouette.png", dpi=150)
+    plt.show()
     plt.close(fig)
 
     # final kmeans
