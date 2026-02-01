@@ -690,6 +690,7 @@ def normalize_results_workbook(
             vals = rec["values"]
 
             # UA-only: scale values by Normalized-UA from sku_master (column "Normalized-UA")
+            # UA-only: scale values by Normalized-UA from sku_master (column "Normalized-UA")
             factor = 1.0
             if reg == "UA":
                 k_ua = norm_ua.get(rec["sym_norm"])
@@ -704,7 +705,12 @@ def normalize_results_workbook(
                     nums.append(float(n) * factor)
             med = float(statistics.median(nums)) if nums else None
 
-            raw_stock = _sum_cells(vals.get("Stock"), arrivals_qty.get(reg, {}).get(rec["sym_norm"]))
+            # --- ARRIVALS: UA-normalized має брати Quantity * Normalized-UA ---
+            arr_raw = arrivals_qty.get(reg, {}).get(rec["sym_norm"])  # як у листі UA+/KZ+/UZ+
+            arr_out = (float(arr_raw) * factor) if (reg == "UA" and arr_raw is not None) else arr_raw
+
+            # Stock: додаємо arrivals (сирі), а потім масштабуємо фактором -> еквівалентно множенню arrivals теж
+            raw_stock = _sum_cells(vals.get("Stock"), arr_raw)
             stock_n = _to_number_or_none(raw_stock)
             stock_out = (float(stock_n) * factor) if (stock_n is not None) else raw_stock
 
@@ -714,8 +720,9 @@ def normalize_results_workbook(
                 "Mediana": med,
                 "Month_sales": med,
                 "Stock": stock_out,
-                **({"Arrivals_added": arrivals_qty.get(reg, {}).get(rec["sym_norm"])} if include_arrivals_added_col else {}),
+                **({"Arrivals_added": arr_out} if include_arrivals_added_col else {}),
             }
+
             # Атрибути SKU (тільки якщо SKU існує у sku_set)
             if rec["sym_norm"] in sku_set:
                 row_map["Name"] = sku_attrs.get(rec["sym_norm"], {}).get("Name", "")
