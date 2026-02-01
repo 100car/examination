@@ -107,6 +107,7 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 SKU_SHEET_NAME = "SKU"
 SKU_HEADER_NAME = "SKU (ключ, унікальний)"
+NORM_UA_HEADER = "Normalized-UA"
 MAPPING_SHEET_NAME = "Mapping"
 MAPPING_WRONG_HEADER = "Неправильный"
 MAPPING_RIGHT_HEADER = "Артикул"
@@ -240,6 +241,7 @@ def _apply_month_sales_corrections(
     *,
     use_color: bool = True,
     log_path: str = DEFAULT_CORRECTIONS_LOG_PATH,
+    norm_ua: Optional[Dict[str, float]] = None,
 ) -> None:
     """Застосовує корекції Month_sales з файлу до листів *-normalized у wb.
 
@@ -289,19 +291,24 @@ def _apply_month_sales_corrections(
                 continue
 
             old_ms = _to_number_or_none(ws.cell(rr, ms_col).value)
-            ws.cell(rr, ms_col).value = new_ms
+            applied_ms = new_ms
+            if reg == "UA" and applied_ms is not None:
+                k = (norm_ua or {}).get(sym)
+                factor = float(k) if k not in (None, 0) else 1.0
+                applied_ms = float(applied_ms) * factor
+            ws.cell(rr, ms_col).value = applied_ms
             summary[reg]["replaced"] += 1
 
             med = _to_number_or_none(ws.cell(rr, med_col).value)
             cell = ws.cell(rr, ms_col)
 
-            if (new_ms is not None) and (med is not None) and (abs(new_ms - med) > 1e-9):
+            if (applied_ms is not None) and (med is not None) and (abs(applied_ms - med) > 1e-9):
                 cell.fill = FILL_MONTH_CHANGED
                 summary[reg]["changed"] += 1
             else:
                 cell.fill = FILL_YELLOW
 
-            if old_ms is not None and new_ms is not None and abs(old_ms - new_ms) > 1e-9:
+            if old_ms is not None and applied_ms is not None and abs(old_ms - applied_ms) > 1e-9:
                 detail_lines.append(f"{reg}\tUPDATED\t{sym}\told={old_ms}\tnew={new_ms}\tmed={med}")
 
     try:
@@ -325,14 +332,30 @@ def _apply_month_sales_corrections(
     if total_nf > 0:
         print(f"{_fmt_status('WRN', use_color)}  | step=3 | corrections_not_found_total={total_nf} | log={os.path.abspath(log_path)}")
 
-def load_sku_master(sku_master_path: str) -> Tuple[Set[str], Dict[str, str], Dict[str, Dict[str, str]]]:
+def load_sku_master(
+    sku_master_path: str,
+) -> Tuple[Set[str], Dict[str, str], Dict[str, Dict[str, str]], Dict[str, float]]:
     """Завантажує:
     - sku_set (лист 'SKU', колонка SKU_HEADER_NAME)
     - mapping wrong->right (лист 'Mapping')
     - attrs: dict[SKU] -> {"Name":..,"Brand":..,"Group1":..,"Group2":..} (лист 'SKU')
+    - norm_ua: dict[SKU] -> Normalized-UA (float) (лист 'SKU', колонка NORM_UA_HEADER)
 
     Всі SKU ключі приводяться до normalize_symbol().
     """
+    def _to_float_local(x: object) -> Optional[float]:
+        if x is None:
+            return None
+        if isinstance(x, (int, float)):
+            return float(x)
+        try:
+            s = str(x).strip().replace(",", ".")
+            if s == "":
+                return None
+            return float(s)
+        except Exception:
+            return None
+
     wb = openpyxl.load_workbook(sku_master_path, data_only=True)
 
     if SKU_SHEET_NAME not in wb.sheetnames:
@@ -351,8 +374,11 @@ def load_sku_master(sku_master_path: str) -> Tuple[Set[str], Dict[str, str], Dic
         if c is not None:
             attr_cols[h] = c
 
+    norm_ua_col = _find_header_col(ws_sku, NORM_UA_HEADER)
+
     sku_set: Set[str] = set()
     attrs: Dict[str, Dict[str, str]] = {}
+    norm_ua: Dict[str, float] = {}
 
     for r in range(2, ws_sku.max_row + 1):
         sku = normalize_symbol(ws_sku.cell(r, sku_col).value)
@@ -366,8 +392,12 @@ def load_sku_master(sku_master_path: str) -> Tuple[Set[str], Dict[str, str], Dic
             row_attrs[h] = "" if v is None else str(v).strip()
         attrs[sku] = row_attrs
 
+        if norm_ua_col is not None:
+            k = _to_float_local(ws_sku.cell(r, norm_ua_col).value)
+            if k is not None:
+                norm_ua[sku] = float(k)
+
     mapping: Dict[str, str] = {}
-    sku_attrs: Dict[str, Dict[str, str]] = {}
     if MAPPING_SHEET_NAME in wb.sheetnames:
         ws_map = wb[MAPPING_SHEET_NAME]
         wrong_col = _find_header_col(ws_map, MAPPING_WRONG_HEADER)
@@ -384,9 +414,7 @@ def load_sku_master(sku_master_path: str) -> Tuple[Set[str], Dict[str, str], Dic
             if wrong and right:
                 mapping[wrong] = right
 
-    return sku_set, mapping, attrs
-
-
+    return sku_set, mapping, attrs, norm_ua
 def _to_number_or_none(x: object) -> Optional[float]:
     """Пробує конвертувати в float; якщо не виходить — None."""
     if x is None:
@@ -467,10 +495,11 @@ def normalize_results_workbook(
     sku_set: Set[str] = set()
     mapping: Dict[str, str] = {}
     sku_attrs: Dict[str, Dict[str, str]] = {}
+    norm_ua: Dict[str, float] = {}
     try:
         if not os.path.exists(sku_master_path):
             raise FileNotFoundError(f"sku_master.xlsx не знайдено: {sku_master_path}")
-        sku_set, mapping, sku_attrs = load_sku_master(sku_master_path)
+        sku_set, mapping, sku_attrs, norm_ua = load_sku_master(sku_master_path)
     except Exception as exc:
         print(f"WARNING: SKU master не завантажився, підсвіток/валідації не буде: {exc}")
 
@@ -630,6 +659,11 @@ def normalize_results_workbook(
 
         # Додаємо канонічні місяці у фіксованому порядку на початок вихідних колонок
         base_other = month_keys + base_other
+        # TOTAL: має бути сумою продажів за 12 місяців (у *-normalized рахуємо з колонок янв..дек)
+        # Ставимо TOTAL одразу після 12 місяців, навіть якщо в джерелі колонки TOTAL не було або вона була не в тому місці.
+        if "TOTAL" in base_other:
+            base_other = [h for h in base_other if h != "TOTAL"]
+        base_other.insert(len(month_keys), "TOTAL")
         out_headers = [symbol_key, NORMALIZED_COL_HEADER, "Mediana", "Month_sales", "Stock"]
         if include_arrivals_added_col:
             out_headers.append("Arrivals_added")
@@ -655,20 +689,31 @@ def normalize_results_workbook(
             rec = agg[k]
             vals = rec["values"]
 
-            # median of month columns
+            # UA-only: scale values by Normalized-UA from sku_master (column "Normalized-UA")
+            factor = 1.0
+            if reg == "UA":
+                k_ua = norm_ua.get(rec["sym_norm"])
+                if k_ua not in (None, 0):
+                    factor = float(k_ua)
+
+            # median of month columns (already scaled for UA)
             nums: List[float] = []
             for mk in month_keys:
                 n = _to_number_or_none(vals.get(mk))
                 if n is not None:
-                    nums.append(n)
+                    nums.append(float(n) * factor)
             med = float(statistics.median(nums)) if nums else None
+
+            raw_stock = _sum_cells(vals.get("Stock"), arrivals_qty.get(reg, {}).get(rec["sym_norm"]))
+            stock_n = _to_number_or_none(raw_stock)
+            stock_out = (float(stock_n) * factor) if (stock_n is not None) else raw_stock
 
             row_map: Dict[str, object] = {
                 symbol_key: rec["symbol"],
                 NORMALIZED_COL_HEADER: rec["sym_norm"],
                 "Mediana": med,
                 "Month_sales": med,
-                "Stock": _sum_cells(vals.get("Stock"), arrivals_qty.get(reg, {}).get(rec["sym_norm"])),
+                "Stock": stock_out,
                 **({"Arrivals_added": arrivals_qty.get(reg, {}).get(rec["sym_norm"])} if include_arrivals_added_col else {}),
             }
             # Атрибути SKU (тільки якщо SKU існує у sku_set)
@@ -679,7 +724,20 @@ def normalize_results_workbook(
                 row_map["Group2"] = sku_attrs.get(rec["sym_norm"], {}).get("Group2", "")
 
             for h in base_other:
-                row_map[h] = vals.get(h)
+                if reg == "UA" and h in month_keys:
+                    n = _to_number_or_none(vals.get(h))
+                    row_map[h] = (float(n) * factor) if n is not None else vals.get(h)
+                else:
+                    row_map[h] = vals.get(h)
+
+
+            # TOTAL = сума продажів за 12 місяців (враховуючи UA множник, бо місяці вже записані з factor)
+            total_nums: List[float] = []
+            for mk in month_keys:
+                tn = _to_number_or_none(row_map.get(mk))
+                if tn is not None:
+                    total_nums.append(float(tn))
+            row_map["TOTAL"] = sum(total_nums) if total_nums else None
 
             for c, h in enumerate(out_headers, start=1):
                 cell = ws_dst.cell(out_r, c, row_map.get(h))
@@ -722,6 +780,7 @@ def normalize_results_workbook(
                 corr_path,
                 use_color=use_color,
                 log_path=corrections_log_path,
+                norm_ua=norm_ua,
             )
         except Exception as exc:
             print(f"{_fmt_status('WRN', use_color)}  | step=3 | corrections_failed | {exc}")
